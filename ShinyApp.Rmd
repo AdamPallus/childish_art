@@ -1,0 +1,171 @@
+---
+title: ""
+author: "Adam Pallus"
+date: ""
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r loadmodel,message=FALSE}
+library(magick)
+library(keras)
+library(dplyr)
+model<-load_model_hdf5('childishart-vgg3.hd5')
+# model<-load_model_hdf5('childishart-inception10.hd5')
+
+```
+
+
+```{r eruptions, echo=FALSE}
+
+plot_prediction<-function(img_path){
+  img <- image_load(img_path, target_size = c(150,150))
+  x <- image_to_array(img)
+  # ensure we have a 4d tensor with single element in the batch dimension,
+  # the preprocess the input for prediction using resnet50
+  x <- array_reshape(x, c(1, dim(x)))
+  x <- imagenet_preprocess_input(x)
+  
+  # x<- inception_v3_preprocess_input(x)
+  
+  # make predictions then decode and print them
+  preds <- model %>% predict(x)
+  
+  # cat(paste0('prediction:',preds[1],'\n\n'))
+  
+  mystery<- image_read(img_path)
+  
+  if(preds[1]>0.8){
+    # pred_text=paste0('CHILDISH! ',round(preds[1]*100),'%')
+    pred_text='CHILDISH!'
+    font='Comic Sans'
+    # plot(as.raster(image_to_array(img)/255))
+  } else if (preds[1]<0.2){
+    # pred_text=paste0('ART! ',round(100-preds[1]*100),'%')
+    pred_text='ART!'
+    font='Helvetica'
+    # plot(as.raster(image_to_array(img)/255))
+  }else if (preds[1] >0.2 & preds[1]<0.5){
+    pred_text=paste0('ART? ',round(100-preds[1]*100),'%')
+    font='Helvetica'
+  }else if(preds[1]>0.5 & preds[1] <0.8){
+    pred_text=paste0('CHILDISH? ',round(preds[1]*100),'%')
+    font='Comic Sans'
+    # plot(as.raster(image_to_array(img)/255))
+  }
+  mystery %>%
+    image_scale(500) %>%
+    image_annotate(pred_text,size=50,
+                   boxcolor='gray80',
+                   color='gray20',
+                   gravity='southwest',
+                   font=font)
+}
+```
+
+```{r main}
+get_image<-function(){
+  req(input$file1)
+  plot_prediction(input$file1$datapath)
+  
+}
+
+# fluidPage(
+#   titlePanel('Childish or Art?'),
+#   sidebarLayout(
+#     sidebarPanel(
+#       fileInput("file1", "Choose jpg File",
+#                 accept = c('image/png', 'image/jpeg')
+#       )
+#     ),
+#     mainPanel(
+#       plotOutput('modelresult')
+#     )
+#   )
+# )
+
+fluidPage(
+  titlePanel('Childish or Art?'),
+  sidebarLayout(
+    sidebarPanel(
+      fileInput("file1", "Choose jpg File",
+                accept = c('image/png', 'image/jpeg')
+      )
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Model",
+      plotOutput('modelresult',width='100%')
+        ),
+      tabPanel("About",
+               p('There is something special about a child\'s artwork.  Many children become prolific artists, covering all flat surfaces where they live and play with their work in all mediums. They give their art as gifts to adults who treasure it, and parents save boxes and boxes with creations that have been replaced by newer designs. '),
+               p('It\'s often very easy to distinguish the work of a child from an adult. Even an adult without artistic talents cannot draw or paint a convincing imitation of a child\'s work. Abstract art is often criticized for its resemblance to a child\'s work, but sophisticated art critics can somehow tell a "real" piece of abstract art from the work of a child or amateur.'),
+               p(strong('Can we train a computer to do the same? Can a neural network model look at an image and distinguish a child\'s artwork from that of a professional artist?')),
+               p('To answer this question, I collected images of artwork purported to be created by children as well as those created by real artists in various forms. I discovered that there is a surprising amount of "fake" child art on websites that sell stock art. This created difficulties in the initial training of the model. In fact, I spent more time sorting through the images to produce a good training set. For the model presented here, I used 1000 examples each of "real" art and "child" art for training, with an additional 300 images each for validation and testing.'),
+               p('The model currently deployed here was a result of transfer learning from the VGG-16 model pre-trained on ImageNet data. We added an additional layer of 256 nodes followed by a single sigmoid output node so the model can distinguish only between the two classes.'),
+               #p('The model currently uploaded here was a result of transfer learning from the inceptionV3 model, with weights pre-trained on ImageNet data. We then added another layer of 1024 nodes followed by a single sigmoid output node to enable to model to distinguish only between the two classes. Everything will be labeled as either Childish or Art. '),
+               p('After training for only a short period of time (<30 minutes) we were able to achieve an accuracy of 92% for the test set. Further training resulted only in overtraining of the model. This suggests that the training data is not sufficient to achieve better results. I believe this model could be very effective if more time were devoted to obtaining good examples of true children\'s art and professional abstract art. '),
+               p('Perhaps, a similar model could be trained to a particular person\'s aesthetic taste and automatically search out works of art that might appeal to an individual art lover.')
+      ),
+      tabPanel("Examples",
+               plotOutput('demo1',height = '100%'),
+               plotOutput('demo2',height='100%'),
+               plotOutput('demo3',height='100%'),
+               plotOutput('demo4',height='100%')
+      )
+      )
+    )
+  )
+)
+
+
+  
+# output$writer<-renderText({gen$generated})
+
+output$modelresult<-renderPlot(
+  plot(get_image()),
+  width=500,
+  height=500
+  # 
+  # req(input$file1)
+  # 
+  # if (is.null(inFile)){
+  #   return(image_read('art1.jpg'))}
+  # 
+  # image_read(inFile$datapath)
+  # # img<- plot_prediction(inFile$datapath)
+  # # img
+)
+
+output$demo1<-renderPlot(
+  plot(plot_prediction('artdemo1.jpg')),
+  width=500,
+  height=500
+
+)
+
+output$demo2<-renderPlot(
+  plot(plot_prediction('childdemo1.jpg')),
+  width=500,
+  height=500
+)
+
+output$demo3<-renderPlot(
+  plot(plot_prediction('childdemo2.jpg')),
+  width=500,
+  height=500
+)
+
+output$demo4<-renderPlot(
+  plot(plot_prediction('artdemo2.jpg')),
+  width=500,
+  height=500
+)
+
+```
+
+
